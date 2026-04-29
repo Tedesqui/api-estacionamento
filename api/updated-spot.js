@@ -1,47 +1,64 @@
-// Arquivo: api/update-spot.js
+const admin = require("firebase-admin");
 
-export default function handler(req, res) {
-  // Configurações de CORS para garantir que a requisição seja aceita
+// Evita inicializar o Firebase várias vezes na Vercel
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      // O .replace garante que as quebras de linha (\n) da chave funcionem corretamente
+      privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+    }),
+    // ATENÇÃO: Substitua a URL abaixo pela URL real do seu Firebase Realtime Database
+    databaseURL: "https://SEU_BANCO_DE_DADOS_AQUI.firebaseio.com" 
+  });
+}
+
+const db = admin.database();
+
+export default async function handler(req, res) {
+  // Configurações de CORS para permitir acesso do Seeeduino e do seu app Android
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'OPTIONS,POST');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
-  // Responde imediatamente a requisições OPTIONS (Preflight do CORS)
+  // Responde imediatamente a verificações de segurança (Preflight do CORS)
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // Só aceitamos requisições POST vindas do Seeeduino
+  // Processa os dados enviados pelo Seeeduino
   if (req.method === 'POST') {
+    const { spotId, status } = req.body;
+
+    // Validação para garantir que os dados não vieram vazios
+    if (!spotId || !status) {
+      return res.status(400).json({ error: 'Faltam dados: spotId ou status' });
+    }
+
     try {
-      // Extrai os dados enviados pelo Seeeduino
-      const { spotId, status } = req.body;
+      // Grava a informação no Firebase no formato: vagas -> nome_da_vaga -> status
+      await db.ref(`vagas/${spotId}`).set({
+        status: status,
+        ultimaAtualizacao: new Date().toISOString()
+      });
 
-      if (!spotId || !status) {
-        return res.status(400).json({ error: 'Faltam parametros: spotId ou status' });
-      }
-
-      console.log(`[LOG] Atualização recebida -> Vaga: ${spotId} | Novo Status: ${status}`);
-
-      // ====================================================================
-      // AQUI ENTRA A LÓGICA DO SEU BANCO DE DADOS
-      // Exemplo: Atualizar no MongoDB, Supabase, Firebase Firestore, etc.
-      // await db.collection('vagas').updateOne({ id: spotId }, { $set: { status: status } });
-      // ====================================================================
-
-      // Retorna sucesso para o Seeeduino
-      return res.status(200).json({ success: true, message: 'Status atualizado com sucesso' });
-
+      // Retorna sucesso para o hardware
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Status gravado no Firebase com sucesso!' 
+      });
+      
     } catch (error) {
-      console.error('Erro ao processar requisição:', error);
-      return res.status(500).json({ error: 'Erro interno do servidor' });
+      console.error('Erro ao gravar no Firebase:', error);
+      return res.status(500).json({ error: 'Erro interno ao gravar no banco de dados' });
     }
   } else {
-    // Se tentar acessar a URL pelo navegador (GET), avisa que o método é inválido
-    return res.status(405).json({ error: 'Método não permitido. Use POST.' });
+    // Bloqueia qualquer método que não seja POST (como abrir o link direto no navegador)
+    return res.status(405).json({ error: 'Método HTTP não permitido. Use POST.' });
   }
 }
