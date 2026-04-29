@@ -10,7 +10,7 @@ if (!admin.apps.length) {
       privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
     }),
     // ATENÇÃO: Substitua a URL abaixo pela URL real do seu Firebase Realtime Database
-    databaseURL: "https://SEU_BANCO_DE_DADOS_AQUI.firebaseio.com" 
+    databaseURL: "https://estacionamento-shopping-default-rtdb.firebaseio.com/" 
   });
 }
 
